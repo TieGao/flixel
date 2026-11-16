@@ -88,6 +88,15 @@ class FlxG
 	public static var fixedStepMS(get, set):Int;
 
 	/**
+	 * 固定步长（毫秒，浮点）。`> 0` 时优先于 `fixedStepMS`。
+	 *
+	 * `fixedStepMS` 是 `Int`，120 TPS 会落成 8ms（125 步/秒）、240 TPS 落成 4ms
+	 * （250 步/秒），逻辑时钟因此系统性偏快。需要在任意 TPS 下都精确时写这里。
+	 * 赋 `fixedStepMS` 会把本字段清回 0。
+	 */
+	public static var fixedStepMSExact:Float = 0;
+
+	/**
 	 * How fast or slow time should pass in the game; default is `1.0`.
 	 */
 	public static var timeScale:Float = 1.0;
@@ -854,6 +863,8 @@ class FlxG
 	{
 		if (value < 1) value = 1;
 		_fixedStepMS = value;
+		// 显式写整型步长即表示放弃浮点步长
+		fixedStepMSExact = 0;
 
 		if (game != null)
 		{

@@ -101,6 +101,14 @@ class FlxGame extends Sprite
 	public var ticks(default, null):Int = 0;
 
 	/**
+	 * Number of logic steps (`step()` calls) since the game started.
+	 *
+	 * Fixed-step logic may run zero or several steps per update tick, so this
+	 * is the counter that reflects how fast the game clock actually advances.
+	 */
+	public var steps(default, null):Int = 0;
+
+	/**
 	 * Enables or disables the filters set via `setFilters()`.
 	 */
 	public var filtersEnabled:Bool = true;
@@ -162,6 +170,15 @@ class FlxGame extends Sprite
 	 * Should always (and automatically) be set to roughly 2x the stage framerate.
 	 */
 	var _maxAccumulation:Float;
+
+	/**
+	 * Upper bound, in milliseconds, of logic time a single update tick may
+	 * catch up on. Fixed-step logic has to track the wall clock, so the
+	 * accumulated time is only trimmed to keep a hitch from snowballing; a
+	 * clamp tighter than that drops the difference for good, which turns a
+	 * render loop that runs below the update rate into permanent slow motion.
+	 */
+	public var maxCatchUpMS:Float = 100;
 
 	/**
 	 * Whether the game lost focus.
@@ -655,10 +672,15 @@ class FlxGame extends Sprite
 
 			if (FlxG.fixedTimestep)
 			{
-				_stepMS = FlxG.fixedStepMS;
+				_stepMS = FlxG.fixedStepMSExact > 0 ? FlxG.fixedStepMSExact : FlxG.fixedStepMS;
 				_stepSeconds = _stepMS / 1000;
 				_accumulator += _elapsedMS;
-				_accumulator = (_accumulator > _maxAccumulation) ? _maxAccumulation : _accumulator;
+
+				// 只夹住单个 tick 最多补多少，而不是夹成"一两步"：固定步长的
+				// 逻辑时钟必须跟住真实时间，丢掉的差额不会自己回来。
+				final catchUpMS = Math.max(maxCatchUpMS, _stepMS * 2);
+				if (_accumulator > catchUpMS)
+					_accumulator = catchUpMS;
 
 				while (_accumulator >= _stepMS)
 				{
@@ -779,6 +801,8 @@ class FlxGame extends Sprite
 	 */
 	function step():Void
 	{
+		steps++;
+
 		// Handle game reset request
 		if (_resetGame)
 		{
@@ -854,7 +878,7 @@ class FlxGame extends Sprite
 
 		updateElapsed();
 
-		var fixedElapsed = FlxG.timeScale * (FlxG.fixedStepMS / 1000);
+		var fixedElapsed = FlxG.timeScale * _stepSeconds;
 		_state.tryFixedStepUpdate(fixedElapsed);
 
 		FlxG.signals.preUpdate.dispatch();
